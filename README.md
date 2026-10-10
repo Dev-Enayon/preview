@@ -88,4 +88,4 @@ Keyboard shortcuts never interfere with typing in the lyrics editor.
 npm run lint   # ESLint
 npm test       # Vitest unit + component tests
 npm run build  # TypeScript check + production build (dist/)
-```
+```# preview

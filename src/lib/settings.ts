@@ -1,4 +1,5 @@
 import type { ProjectionSettings } from "../types";
+import { DEFAULT_BACKGROUND } from "./background";
 
 export const DEFAULT_SETTINGS: ProjectionSettings = {
   fontSize: 9,
@@ -12,35 +13,34 @@ export const DEFAULT_SETTINGS: ProjectionSettings = {
   lineHeight: 1.25,
   autoFit: true,
   showVerseNumbers: false,
+  background: { ...DEFAULT_BACKGROUND },
 };
 
-export interface BackgroundPreset {
-  id: string;
-  label: string;
-  backgroundColor: string;
-  textColor: string;
-}
-
-export const BACKGROUND_PRESETS: BackgroundPreset[] = [
-  {
-    id: "black-white",
-    label: "Black / White",
-    backgroundColor: "#000000",
-    textColor: "#ffffff",
-  },
-  {
-    id: "white-black",
-    label: "White / Black",
-    backgroundColor: "#ffffff",
-    textColor: "#111111",
-  },
-  {
-    id: "blue-white",
-    label: "Dark Blue / White",
-    backgroundColor: "#0b1f3a",
-    textColor: "#ffffff",
-  },
-];
+/**
+ * Settings the "Reset text & layout" control restores. Background and text
+ * color are owned by the Background panel so resetting layout never surprises
+ * the operator by changing the live background mid-service.
+ */
+export const DEFAULT_TEXT_SETTINGS: Pick<
+  ProjectionSettings,
+  | "fontSize"
+  | "fontFamily"
+  | "fontWeight"
+  | "textAlign"
+  | "verticalAlign"
+  | "lineHeight"
+  | "autoFit"
+  | "showVerseNumbers"
+> = {
+  fontSize: DEFAULT_SETTINGS.fontSize,
+  fontFamily: DEFAULT_SETTINGS.fontFamily,
+  fontWeight: DEFAULT_SETTINGS.fontWeight,
+  textAlign: DEFAULT_SETTINGS.textAlign,
+  verticalAlign: DEFAULT_SETTINGS.verticalAlign,
+  lineHeight: DEFAULT_SETTINGS.lineHeight,
+  autoFit: DEFAULT_SETTINGS.autoFit,
+  showVerseNumbers: DEFAULT_SETTINGS.showVerseNumbers,
+};
 
 export const FONT_FAMILIES: { label: string; value: string }[] = [
   {
@@ -62,7 +62,16 @@ export function loadSettings(): ProjectionSettings {
     const raw = localStorage.getItem(SETTINGS_KEY);
     if (!raw) return { ...DEFAULT_SETTINGS };
     const parsed = JSON.parse(raw) as Partial<ProjectionSettings>;
-    return { ...DEFAULT_SETTINGS, ...parsed };
+    return {
+      ...DEFAULT_SETTINGS,
+      ...parsed,
+      // `background` is nested, so merge it explicitly to avoid losing fields
+      // when an older, partial value is read from storage.
+      background: {
+        ...DEFAULT_BACKGROUND,
+        ...(parsed.background ?? {}),
+      },
+    };
   } catch {
     return { ...DEFAULT_SETTINGS };
   }

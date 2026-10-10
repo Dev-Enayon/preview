@@ -18,7 +18,7 @@ import {
   renderSlideText,
   splitPassage,
 } from "../lib/bible";
-import { loadSettings, saveSettings } from "../lib/settings";
+import { DEFAULT_SETTINGS, loadSettings, saveSettings } from "../lib/settings";
 import {
   loadOperatorSession,
   saveOperatorSession,
@@ -35,6 +35,8 @@ import { useSongs } from "../hooks/useSongs";
 import { useBible } from "../hooks/useBible";
 import { useMedia } from "../hooks/useMedia";
 import { SlideStage } from "./SlideStage";
+import { BackgroundLayer } from "./BackgroundLayer";
+import { BackgroundPanel } from "./BackgroundPanel";
 import { SettingsPanel } from "./SettingsPanel";
 import { BiblePanel } from "./BiblePanel";
 import { MediaPanel } from "./MediaPanel";
@@ -550,6 +552,21 @@ export function Operator() {
     setSettings((prev) => ({ ...prev, ...patch }));
   }, []);
 
+  // Restore the original default background and default text styling without
+  // touching saved songs, Bible content or uploaded media.
+  const resetBackground = useCallback(() => {
+    setSettings((prev) => ({
+      ...prev,
+      textColor: DEFAULT_SETTINGS.textColor,
+      background: { ...DEFAULT_SETTINGS.background },
+    }));
+  }, []);
+
+  const notify = useCallback((message: string) => {
+    setStatus(message);
+    window.setTimeout(() => setStatus(null), 3000);
+  }, []);
+
   const loadSong = useCallback((song: Song) => {
     setEditorName(song.name);
     setEditorText(song.lyrics);
@@ -920,7 +937,7 @@ export function Operator() {
                     : "Lyrics mode"}
               </span>
             </div>
-            <div className="aspect-video w-full overflow-hidden rounded-lg border border-slate-700">
+            <div className="relative aspect-video w-full overflow-hidden rounded-lg border border-slate-700">
               {mode === "media" ? (
                 <MediaPreview
                   item={selectedMedia}
@@ -928,11 +945,17 @@ export function Operator() {
                   blank={blank}
                 />
               ) : (
-                <SlideStage
-                  text={blank ? "" : activeText}
-                  settings={settings}
-                  inset="6% 7%"
-                />
+                <>
+                  <BackgroundLayer settings={settings} />
+                  <div className="absolute inset-0">
+                    <SlideStage
+                      text={blank ? "" : activeText}
+                      settings={settings}
+                      inset="6% 7%"
+                      transparentBackground
+                    />
+                  </div>
+                </>
               )}
             </div>
             {mode !== "media" && (
@@ -1034,44 +1057,60 @@ export function Operator() {
           )}
         </div>
 
-        {/* Right: settings */}
-        <section className="flex flex-col gap-3 rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-300">
-            {mode === "media" ? "Media presentation" : "Projection appearance"}
-          </h2>
+        {/* Right: background + settings */}
+        <div className="flex min-h-0 flex-col gap-3">
           {mode === "media" ? (
-            <div className="flex flex-col gap-3 text-sm text-slate-300">
-              <p className="text-xs text-slate-500">
-                The projector shows only the selected image or video — nothing
-                else. Unused space stays black.
-              </p>
-              <div className="flex flex-col gap-1">
-                <span className="text-xs font-medium uppercase tracking-wide text-slate-400">
-                  Selected
-                </span>
-                <span className="truncate text-slate-200">
-                  {selectedMedia ? selectedMedia.name : "None"}
-                </span>
-              </div>
-              <div className="rounded-lg border border-slate-800 bg-slate-950/50 p-3 text-xs text-slate-400">
-                <p className="mb-1 font-semibold text-slate-300">
-                  Stored on this device
+            <section className="flex flex-col gap-3 rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-300">
+                Media presentation
+              </h2>
+              <div className="flex flex-col gap-3 text-sm text-slate-300">
+                <p className="text-xs text-slate-500">
+                  The projector shows only the selected image or video — nothing
+                  else. Unused space stays black.
                 </p>
-                <p>
-                  Uploaded media lives in this browser (IndexedDB) on this
-                  computer. It is not uploaded anywhere and will not appear on
-                  another computer or browser profile.
-                </p>
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                    Selected
+                  </span>
+                  <span className="truncate text-slate-200">
+                    {selectedMedia ? selectedMedia.name : "None"}
+                  </span>
+                </div>
+                <div className="rounded-lg border border-slate-800 bg-slate-950/50 p-3 text-xs text-slate-400">
+                  <p className="mb-1 font-semibold text-slate-300">
+                    Stored on this device
+                  </p>
+                  <p>
+                    Uploaded media lives in this browser (IndexedDB) on this
+                    computer. It is not uploaded anywhere and will not appear on
+                    another computer or browser profile.
+                  </p>
+                </div>
               </div>
-            </div>
+            </section>
           ) : (
-            <SettingsPanel
-              settings={settings}
-              onChange={patchSettings}
-              showVerseNumbersOption={mode === "bible"}
-            />
+            <>
+              <BackgroundPanel
+                settings={settings}
+                onChange={patchSettings}
+                onReset={resetBackground}
+                onNotify={notify}
+                media={media}
+              />
+              <section className="flex flex-col gap-3 rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-300">
+                  Projection appearance
+                </h2>
+                <SettingsPanel
+                  settings={settings}
+                  onChange={patchSettings}
+                  showVerseNumbersOption={mode === "bible"}
+                />
+              </section>
+            </>
           )}
-          <div className="mt-2 rounded-lg border border-slate-800 bg-slate-950/50 p-3 text-xs text-slate-400">
+          <div className="rounded-lg border border-slate-800 bg-slate-950/50 p-3 text-xs text-slate-400">
             <p className="mb-1 font-semibold text-slate-300">
               Keyboard shortcuts
             </p>
@@ -1088,7 +1127,7 @@ export function Operator() {
             )}
             <p>F full screen · Esc exit full screen</p>
           </div>
-        </section>
+        </div>
       </main>
     </div>
   );

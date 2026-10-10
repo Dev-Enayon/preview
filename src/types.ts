@@ -54,6 +54,33 @@ export interface MediaProjection {
   restartToken: number;
 }
 
+/**
+ * Which background the lyrics / Bible projection is drawn on.
+ * - "default": the app's original solid background (`backgroundColor`).
+ * - "color":   a solid color chosen by the operator.
+ * - "image":   a picture from the local media library.
+ */
+export type BackgroundType = "default" | "color" | "image";
+
+/**
+ * Background configuration for lyrics and Bible projection. Kept inside the
+ * projection settings so it is synchronized to the projection window and
+ * persisted with the rest of the appearance settings automatically.
+ *
+ * Only a lightweight media *identifier* is stored here — never image bytes.
+ */
+export interface BackgroundConfig {
+  type: BackgroundType;
+  /** Solid color for the "color" type, and the fill behind "contain" images. */
+  color: string;
+  /** Local media library id of the background image (null when unset). */
+  mediaId: string | null;
+  /** How an image background fills the screen. */
+  fit: MediaFit;
+  /** Dimming opacity applied over the background only, 0..0.8. */
+  dim: number;
+}
+
 export interface ProjectionSettings {
   /** Base/max font size expressed as a percentage of the stage height. */
   fontSize: number;
@@ -62,6 +89,7 @@ export interface ProjectionSettings {
   textAlign: TextAlign;
   verticalAlign: VerticalAlign;
   textColor: string;
+  /** Solid background used by the original "default" background type. */
   backgroundColor: string;
   lineHeight: number;
   /** When true, shrink text so it always fits the stage. */
@@ -71,6 +99,8 @@ export interface ProjectionSettings {
    * screen. Disabled by default; has no effect on lyrics.
    */
   showVerseNumbers: boolean;
+  /** Custom background for lyrics / Bible projection. */
+  background: BackgroundConfig;
 }
 
 export interface ProjectionState {

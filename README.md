@@ -66,6 +66,31 @@ Use the **Lyrics · Bible · Media** selector in the header.
 Switching modes never mixes content: only the current mode reaches the
 projector.
 
+## Backgrounds (Lyrics & Bible)
+
+In **Lyrics** and **Bible** modes the **Background** panel lets you choose what
+the text is drawn on:
+
+- **Default** — the app's original solid color.
+- **Solid Color** — pick with the color picker, type a HEX value (`#0A2540`),
+  or tap a preset (black, white, navy, dark blue, dark green, purple, dark
+  gray). HEX values are validated before they apply.
+- **Image** — choose a picture already in your Media Library (no re-upload
+  needed), or upload one right from the panel. Pick **Cover** (fill the screen)
+  or **Contain** (whole picture, solid color behind it). A **dimming** slider
+  (0–80%) darkens the picture only; the text stays bright.
+
+You can also set the **text color** (white, black or custom). Backgrounds and
+text color update the projection **live**, without reopening the window and
+without changing the current slide or passage.
+
+Background settings persist on this device, and only a lightweight picture
+*identifier* is synchronized — the image itself is read from local storage by
+the projection window. If a chosen image is missing, the operator sees a
+notice and the projection quietly falls back to the solid color. **Reset to
+Default** restores the original background and text styling and never deletes
+uploaded media.
+
 ## Media mode
 
 **Uploading** — drag files onto the drop zone, or click **Browse files**. You

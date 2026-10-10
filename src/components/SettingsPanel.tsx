@@ -1,10 +1,6 @@
 import type { ReactNode } from "react";
 import type { ProjectionSettings } from "../types";
-import {
-  BACKGROUND_PRESETS,
-  DEFAULT_SETTINGS,
-  FONT_FAMILIES,
-} from "../lib/settings";
+import { DEFAULT_TEXT_SETTINGS, FONT_FAMILIES } from "../lib/settings";
 
 interface SettingsPanelProps {
   settings: ProjectionSettings;
@@ -27,36 +23,6 @@ const inputClass =
 export function SettingsPanel({ settings, onChange, showVerseNumbersOption = false }: SettingsPanelProps) {
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-2">
-        <Label>Background presets</Label>
-        <div className="grid grid-cols-3 gap-2">
-          {BACKGROUND_PRESETS.map((preset) => (
-            <button
-              key={preset.id}
-              type="button"
-              onClick={() =>
-                onChange({
-                  backgroundColor: preset.backgroundColor,
-                  textColor: preset.textColor,
-                })
-              }
-              className="flex flex-col items-center gap-1 rounded-md border border-slate-700 p-2 text-[10px] text-slate-300 transition hover:border-sky-500"
-            >
-              <span
-                className="flex h-6 w-full items-center justify-center rounded"
-                style={{
-                  backgroundColor: preset.backgroundColor,
-                  color: preset.textColor,
-                }}
-              >
-                Aa
-              </span>
-              {preset.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
       <div className="flex flex-col gap-1">
         <Label>Font family</Label>
         <select
@@ -177,33 +143,12 @@ export function SettingsPanel({ settings, onChange, showVerseNumbersOption = fal
         </label>
       )}
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className="flex flex-col gap-1">
-          <Label>Text color</Label>
-          <input
-            type="color"
-            value={settings.textColor}
-            onChange={(e) => onChange({ textColor: e.target.value })}
-            className="h-9 w-full cursor-pointer rounded-md border border-slate-700 bg-slate-900"
-          />
-        </div>
-        <div className="flex flex-col gap-1">
-          <Label>Background</Label>
-          <input
-            type="color"
-            value={settings.backgroundColor}
-            onChange={(e) => onChange({ backgroundColor: e.target.value })}
-            className="h-9 w-full cursor-pointer rounded-md border border-slate-700 bg-slate-900"
-          />
-        </div>
-      </div>
-
       <button
         type="button"
-        onClick={() => onChange({ ...DEFAULT_SETTINGS })}
+        onClick={() => onChange({ ...DEFAULT_TEXT_SETTINGS })}
         className="rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-300 transition hover:border-sky-500 hover:text-white"
       >
-        Reset to defaults
+        Reset text &amp; layout
       </button>
     </div>
   );

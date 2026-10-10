@@ -1,9 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import type { MediaProjection, ProjectionState } from "../types";
+import type {
+  BackgroundConfig,
+  MediaProjection,
+  ProjectionSettings,
+  ProjectionState,
+} from "../types";
 import { DEFAULT_SETTINGS } from "../lib/settings";
+import { DEFAULT_BACKGROUND } from "../lib/background";
 import { mediaStore } from "../lib/mediaStore";
 import { Projection } from "./Projection";
+
+function withBackground(background: Partial<BackgroundConfig>): ProjectionSettings {
+  return { ...DEFAULT_SETTINGS, background: { ...DEFAULT_BACKGROUND, ...background } };
+}
 
 const STATE_KEY = "lyrics-projection:state";
 
@@ -129,5 +139,128 @@ describe("Projection", () => {
     expect(container.querySelector("img")).toBeNull();
     expect(container.querySelector("video")).toBeNull();
     expect(screen.queryByText(/ghost/)).toBeNull();
+  });
+});
+
+describe("Projection backgrounds", () => {
+  it("renders a solid-color background behind lyrics", () => {
+    setState({
+      contentType: "lyrics",
+      text: "Amazing grace",
+      settings: withBackground({ type: "color", color: "#0052ff" }),
+      blank: false,
+    });
+    const { container } = render(<Projection />);
+    expect(screen.getByText("Amazing grace")).toBeInTheDocument();
+    expect(screen.getByTestId("bg-layer")).toHaveStyle({
+      backgroundColor: "#0052ff",
+    });
+    expect(container.querySelector("img")).toBeNull();
+  });
+
+  it("renders a solid-color background behind a Bible passage", () => {
+    setState({
+      contentType: "bible",
+      text: "For God so loved the world",
+      settings: withBackground({ type: "color", color: "#0a2540" }),
+      blank: false,
+    });
+    render(<Projection />);
+    expect(screen.getByText(/For God so loved/)).toBeInTheDocument();
+    expect(screen.getByTestId("bg-layer")).toHaveStyle({
+      backgroundColor: "#0a2540",
+    });
+  });
+
+  it("renders a media-library image background with the text above it", async () => {
+    vi.spyOn(mediaStore, "getBlob").mockResolvedValue(
+      new Blob(["x"], { type: "image/png" }),
+    );
+    setState({
+      contentType: "lyrics",
+      text: "On top of the picture",
+      settings: withBackground({ type: "image", mediaId: "m1", fit: "cover" }),
+      blank: false,
+    });
+
+    const { container } = render(<Projection />);
+    await waitFor(() =>
+      expect(screen.getByTestId("bg-image")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("bg-image")).toHaveStyle({ objectFit: "cover" });
+    expect(screen.getByText("On top of the picture")).toBeInTheDocument();
+    // The image is a background, never a projected "media" element with chrome.
+    expect(container.querySelector("video")).toBeNull();
+  });
+
+  it("honours the image fit setting (cover / contain)", async () => {
+    vi.spyOn(mediaStore, "getBlob").mockResolvedValue(
+      new Blob(["x"], { type: "image/png" }),
+    );
+    setState({
+      contentType: "bible",
+      text: "verse",
+      settings: withBackground({ type: "image", mediaId: "m1", fit: "contain" }),
+      blank: false,
+    });
+    render(<Projection />);
+    await waitFor(() =>
+      expect(screen.getByTestId("bg-image")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("bg-image")).toHaveStyle({
+      objectFit: "contain",
+    });
+  });
+
+  it("dims only the background layer, never the text", async () => {
+    vi.spyOn(mediaStore, "getBlob").mockResolvedValue(
+      new Blob(["x"], { type: "image/png" }),
+    );
+    setState({
+      contentType: "lyrics",
+      text: "Bright text",
+      settings: withBackground({ type: "image", mediaId: "m1", dim: 0.5 }),
+      blank: false,
+    });
+    render(<Projection />);
+    const dim = await screen.findByTestId("bg-dim");
+    expect(dim).toHaveStyle({ opacity: "0.5" });
+    const text = screen.getByText("Bright text");
+    expect(dim.contains(text)).toBe(false);
+  });
+
+  it("falls back to the solid color when the background image is missing", async () => {
+    vi.spyOn(mediaStore, "getBlob").mockResolvedValue(null);
+    setState({
+      contentType: "lyrics",
+      text: "Still here",
+      settings: withBackground({
+        type: "image",
+        mediaId: "gone",
+        color: "#0b3d2e",
+      }),
+      blank: false,
+    });
+    render(<Projection />);
+    await waitFor(() => expect(mediaStore.getBlob).toHaveBeenCalled());
+    expect(screen.queryByTestId("bg-image")).toBeNull();
+    expect(screen.getByTestId("bg-layer")).toHaveStyle({
+      backgroundColor: "#0b3d2e",
+    });
+    // Missing media must not leak a filename or error onto the projection.
+    expect(screen.queryByText(/gone/)).toBeNull();
+  });
+
+  it("shows no operator controls or labels on the projection", () => {
+    setState({
+      contentType: "lyrics",
+      text: "Clean screen",
+      settings: withBackground({ type: "color", color: "#2e1065" }),
+      blank: false,
+    });
+    render(<Projection />);
+    expect(screen.queryByText(/^Background$/i)).toBeNull();
+    expect(screen.queryByText(/Media Library/i)).toBeNull();
+    expect(screen.queryByText(/Choose from/i)).toBeNull();
   });
 });

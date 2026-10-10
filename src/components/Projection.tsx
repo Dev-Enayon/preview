@@ -9,6 +9,7 @@ import {
 } from "../lib/sync";
 import { SlideStage } from "./SlideStage";
 import { MediaStage } from "./MediaStage";
+import { BackgroundLayer } from "./BackgroundLayer";
 
 const EMPTY_STATE: ProjectionState = {
   contentType: "lyrics",
@@ -108,14 +109,13 @@ export function Projection() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
 
-  const showingMedia = state.contentType === "media" && !!state.media;
-  const backgroundColor = showingMedia ? "#000000" : state.settings.backgroundColor;
+  const showingMedia = state.contentType === "media";
   useEffect(() => {
-    document.body.style.backgroundColor = backgroundColor;
+    document.body.style.backgroundColor = "#000000";
     return () => {
       document.body.style.backgroundColor = "";
     };
-  }, [backgroundColor]);
+  }, []);
 
   return (
     <>
@@ -123,21 +123,25 @@ export function Projection() {
         html, body, #root { height: 100%; margin: 0; padding: 0; overflow: hidden; background: #000; }
         body { cursor: ${cursorHidden ? "none" : "default"}; }
       `}</style>
-      <div
-        style={{
-          position: "fixed",
-          inset: 0,
-          backgroundColor: state.blank
-            ? state.settings.backgroundColor
-            : backgroundColor,
-        }}
-      >
-        {!state.blank &&
-          (showingMedia && state.media ? (
+      <div style={{ position: "fixed", inset: 0, backgroundColor: "#000000" }}>
+        {showingMedia ? (
+          !state.blank && state.media ? (
             <MediaStage media={state.media} />
-          ) : (
-            <SlideStage text={state.text} settings={state.settings} />
-          ))}
+          ) : null
+        ) : (
+          <>
+            <BackgroundLayer settings={state.settings} />
+            {!state.blank && (
+              <div style={{ position: "absolute", inset: 0 }}>
+                <SlideStage
+                  text={state.text}
+                  settings={state.settings}
+                  transparentBackground
+                />
+              </div>
+            )}
+          </>
+        )}
       </div>
     </>
   );

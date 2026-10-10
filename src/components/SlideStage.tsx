@@ -9,6 +9,11 @@ interface SlideStageProps {
   inset?: string;
   /** Base font size (px) used when the stage is too small to measure. */
   className?: string;
+  /**
+   * When true the stage paints no background of its own so a separate
+   * `BackgroundLayer` (color / image / dimming) shows through beneath the text.
+   */
+  transparentBackground?: boolean;
 }
 
 /**
@@ -21,6 +26,7 @@ export function SlideStage({
   settings,
   inset = "4% 5%",
   className,
+  transparentBackground = false,
 }: SlideStageProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLDivElement>(null);
@@ -50,7 +56,9 @@ export function SlideStage({
         position: "relative",
         height: "100%",
         width: "100%",
-        backgroundColor: settings.backgroundColor,
+        backgroundColor: transparentBackground
+          ? "transparent"
+          : settings.backgroundColor,
         overflow: "hidden",
       }}
     >

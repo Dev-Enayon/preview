@@ -395,3 +395,170 @@ describe("Operator media mode", () => {
     expect(screen.getByText(/Slide 1 of 2/i)).toBeInTheDocument();
   });
 });
+
+const SETTINGS_KEY = "lyrics-projection:settings";
+
+function storedSettings(): {
+  textColor?: string;
+  background?: { type?: string; color?: string; mediaId?: string | null; fit?: string; dim?: number };
+} {
+  return JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
+}
+
+async function click(name: string | RegExp) {
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name }));
+  });
+}
+
+describe("Operator backgrounds", () => {
+  it("shows the Background panel in lyrics/Bible mode and hides it in Media mode", async () => {
+    await renderOperator();
+    expect(
+      screen.getByRole("heading", { name: /^Background$/i }),
+    ).toBeInTheDocument();
+
+    await click("Media");
+    expect(
+      screen.queryByRole("heading", { name: /^Background$/i }),
+    ).not.toBeInTheDocument();
+
+    await click("Bible");
+    expect(
+      screen.getByRole("heading", { name: /^Background$/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("applies a solid-color preset and persists it without changing the slide", async () => {
+    await renderOperator();
+    const editor = screen.getByPlaceholderText(/Type or paste lyrics/i);
+    await act(async () => {
+      fireEvent.change(editor, {
+        target: { value: "first\n\nsecond" },
+      });
+    });
+    await click(/Next/);
+    expect(screen.getByText(/Slide 2 of 2/i)).toBeInTheDocument();
+
+    await click("Solid Color");
+    await click("Background color Navy");
+
+    const stored = storedSettings();
+    expect(stored.background?.type).toBe("color");
+    expect(stored.background?.color).toBe("#0a2540");
+    // The current slide is untouched by a background change.
+    expect(screen.getByText(/Slide 2 of 2/i)).toBeInTheDocument();
+  });
+
+  it("validates HEX input and normalises shorthand", async () => {
+    await renderOperator();
+    await click("Solid Color");
+    const hex = screen.getByLabelText("Background color HEX");
+
+    await act(async () => {
+      fireEvent.change(hex, { target: { value: "notacolor" } });
+    });
+    expect(screen.getByText(/valid HEX color/i)).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.change(hex, { target: { value: "#123" } });
+    });
+    expect(storedSettings().background?.color).toBe("#112233");
+  });
+
+  it("selects a background image from the Media Library", async () => {
+    await renderOperator();
+    await click("Media");
+    await upload([makeFile("bg.png", "image/png")]);
+    await screen.findByText("bg.png");
+
+    await click(/^Lyrics$/);
+    await click("Image");
+    await click("Use bg.png as background");
+
+    expect(storedSettings().background?.type).toBe("image");
+    expect(storedSettings().background?.mediaId).toBeTruthy();
+    expect(screen.getByText("Selected background")).toBeInTheDocument();
+  });
+
+  it("stores the cover/contain fit choice", async () => {
+    await renderOperator();
+    await click("Media");
+    await upload([makeFile("bg.png", "image/png")]);
+    await screen.findByText("bg.png");
+    await click(/^Lyrics$/);
+    await click("Image");
+    await click("Use bg.png as background");
+
+    await click("Contain");
+    expect(storedSettings().background?.fit).toBe("contain");
+    await click("Cover");
+    expect(storedSettings().background?.fit).toBe("cover");
+  });
+
+  it("persists background settings across a reload", async () => {
+    const view = await renderOperator();
+    await click("Solid Color");
+    await click("Background color Purple");
+    await click(/^Lyrics$/);
+    view.unmount();
+
+    await renderOperator();
+    const hex = screen.getByLabelText("Background color HEX") as HTMLInputElement;
+    expect(hex.value).toBe("#2e1065");
+    expect(storedSettings().background?.color).toBe("#2e1065");
+  });
+
+  it("resets the background and text color to the defaults without deleting media", async () => {
+    await renderOperator();
+    await click("Media");
+    await upload([makeFile("keep-me.png", "image/png")]);
+    await screen.findByText("keep-me.png");
+    await click(/^Lyrics$/);
+    await click("Image");
+    await click("Use keep-me.png as background");
+    await click("Text color Black");
+
+    await click("Reset to Default");
+
+    const stored = storedSettings();
+    expect(stored.background?.type).toBe("default");
+    expect(stored.textColor).toBe("#ffffff");
+
+    // Uploaded media is never deleted by a background reset.
+    await click("Media");
+    expect(screen.getByText("keep-me.png")).toBeInTheDocument();
+  });
+
+  it("handles a missing background image gracefully in the operator only", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    await renderOperator();
+    await click("Media");
+    await upload([makeFile("gone.png", "image/png")]);
+    await screen.findByText("gone.png");
+    await click(/^Lyrics$/);
+    await click("Image");
+    await click("Use gone.png as background");
+
+    // Delete the image while it is still the chosen background.
+    await click("Media");
+    await click(/^Delete$/);
+    await click(/^Lyrics$/);
+
+    expect(
+      await screen.findByText(/no longer available in the media library/i),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps Media Mode fully functional after using backgrounds", async () => {
+    await renderOperator();
+    await click("Solid Color");
+    await click("Background color Black");
+    await click("Media");
+    await upload([makeFile("still-works.png", "image/png")]);
+    expect(await screen.findByText("still-works.png")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /Media controls/i }),
+    ).toBeInTheDocument();
+  });
+});

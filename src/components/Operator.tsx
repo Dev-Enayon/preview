@@ -61,6 +61,17 @@ const dateFormatter = new Intl.DateTimeFormat(undefined, {
   minute: "2-digit",
 });
 
+// What the projector shows until the operator explicitly goes live. It is a
+// plain black screen so staged edits (slides, verses, media) never leak before
+// the "Project" button is pressed.
+const IDLE_STATE: ProjectionState = {
+  contentType: "lyrics",
+  text: "",
+  settings: DEFAULT_SETTINGS,
+  blank: true,
+  media: null,
+};
+
 export function Operator() {
   const [initialSession] = useState(loadOperatorSession);
   const [mode, setMode] = useState<ContentType>(
@@ -86,6 +97,7 @@ export function Operator() {
     initialSession?.bibleIndex ?? 0,
   );
   const [isProjecting, setIsProjecting] = useState(false);
+  const [live, setLive] = useState(false);
   const [blank, setBlank] = useState(initialSession?.blank ?? false);
   const [status, setStatus] = useState<string | null>(null);
   const [renameId, setRenameId] = useState<string | null>(null);
@@ -213,8 +225,11 @@ export function Operator() {
     settings,
     blank,
   ]);
-  const projectionStateRef = useRef(projectionState);
-  projectionStateRef.current = projectionState;
+  // Until the operator goes live, the projector only ever receives the idle
+  // screen; once live, every staged change is sent immediately.
+  const broadcastState = live ? projectionState : IDLE_STATE;
+  const broadcastStateRef = useRef(broadcastState);
+  broadcastStateRef.current = broadcastState;
 
   const selectMedia = useCallback((id: string | null) => {
     setMediaId(id);
@@ -328,11 +343,12 @@ export function Operator() {
     saveSettings(settings);
   }, [settings]);
 
-  // Broadcast + persist projection state on every relevant change.
+  // Broadcast + persist the projection state on every relevant change. While
+  // not live this is the idle screen, so staging never reaches the audience.
   useEffect(() => {
-    persistProjectionState(projectionState);
-    postSync({ type: "projection-state", state: projectionState });
-  }, [projectionState]);
+    persistProjectionState(broadcastState);
+    postSync({ type: "projection-state", state: broadcastState });
+  }, [broadcastState]);
 
   // Receive navigation / state requests from the projection window.
   useEffect(() => {
@@ -340,7 +356,7 @@ export function Operator() {
       if (message.type === "request-state") {
         postSync({
           type: "projection-state",
-          state: projectionStateRef.current,
+          state: broadcastStateRef.current,
         });
       } else if (message.type === "nav") {
         navigate(message.action);
@@ -403,19 +419,36 @@ export function Operator() {
         setError(
           "Could not open the projection window. Please allow pop-ups for this site and try again.",
         );
-        return;
+        return false;
       }
       setIsProjecting(true);
       setBlank(false);
-      postSync({ type: "projection-state", state: projectionStateRef.current });
+      postSync({ type: "projection-state", state: broadcastStateRef.current });
       window.setTimeout(
         () => postSync({ type: "fullscreen", action: "enter" }),
         500,
       );
+      return true;
     } catch {
       setError("Could not open the projection window.");
+      return false;
     }
   }, [placeProjectionWindow, setError]);
+
+  // Go live: make sure the projection window exists, then push the staged
+  // content to the audience. From here on every edit is broadcast immediately,
+  // so Project is only needed to go live the first time.
+  const projectLive = useCallback(() => {
+    setError(null);
+    let ready = true;
+    const win = projectionWindowRef.current;
+    if (!win || win.closed) {
+      ready = startProjection();
+    } else {
+      win.focus();
+    }
+    if (ready) setLive(true);
+  }, [startProjection, setError]);
 
   const stopProjection = useCallback(() => {
     const win = projectionWindowRef.current;
@@ -423,6 +456,7 @@ export function Operator() {
     if (win && !win.closed) win.close();
     projectionWindowRef.current = null;
     setIsProjecting(false);
+    setLive(false);
     setStatus("Projection stopped. Nothing was deleted.");
     window.setTimeout(() => setStatus(null), 3000);
   }, []);
@@ -448,10 +482,9 @@ export function Operator() {
         return;
       }
       if (id && id !== mediaId) selectMedia(id);
-      setError(null);
-      if (!isProjecting) startProjection();
+      projectLive();
     },
-    [mediaId, selectMedia, isProjecting, startProjection, setError],
+    [mediaId, selectMedia, projectLive, setError],
   );
 
   const handleDeleteMedia = useCallback(
@@ -716,15 +749,11 @@ export function Operator() {
               Media
             </button>
           </div>
-          <span
-            className={`rounded-full px-3 py-1 text-xs font-medium ${
-              isProjecting
-                ? "bg-emerald-500/15 text-emerald-400"
-                : "bg-slate-700/40 text-slate-300"
-            }`}
-          >
-            {isProjecting ? "Projecting" : "Not projecting"}
-          </span>
+          {live && (
+            <span className="rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-medium text-emerald-400">
+              Projecting
+            </span>
+          )}
           <button
             type="button"
             onClick={() => setBlank((v) => !v)}
@@ -734,8 +763,15 @@ export function Operator() {
           </button>
           <button
             type="button"
+            onClick={projectLive}
+            className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500"
+          >
+            Project
+          </button>
+          <button
+            type="button"
             onClick={startProjection}
-            className="rounded-md bg-sky-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-500"
+            className="rounded-md border border-sky-500/60 px-4 py-2 text-sm font-semibold text-sky-300 transition hover:bg-sky-500/10"
           >
             Start Projection
           </button>

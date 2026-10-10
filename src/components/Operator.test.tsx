@@ -98,6 +98,60 @@ describe("Operator", () => {
     openSpy.mockRestore();
   });
 
+  it("does not show a Not projecting label on the top bar", async () => {
+    await renderOperator();
+    expect(screen.queryByText(/Not projecting/i)).toBeNull();
+    expect(
+      screen.getByRole("button", { name: /^Project$/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("stages sections without projecting until Project is pressed, then stays live", async () => {
+    const fakeWin = {
+      closed: false,
+      focus: vi.fn(),
+      moveTo: vi.fn(),
+      resizeTo: vi.fn(),
+    } as unknown as Window;
+    vi.spyOn(window, "open").mockReturnValue(fakeWin);
+    await renderOperator();
+
+    const editor = screen.getByPlaceholderText(/Type or paste lyrics/i);
+    await act(async () => {
+      fireEvent.change(editor, {
+        target: { value: "first slide\n\nsecond slide" },
+      });
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Next/i }));
+
+    const projected = () =>
+      JSON.parse(
+        localStorage.getItem("lyrics-projection:state") ?? "null",
+      ) as { text: string; blank: boolean };
+
+    // Clicking slides only stages: the projector keeps the idle black screen.
+    expect(projected().blank).toBe(true);
+    expect(projected().text).toBe("");
+
+    fireEvent.click(screen.getByRole("button", { name: /^Project$/i }));
+    expect(await screen.findByText("Projecting")).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(projected().blank).toBe(false);
+      expect(projected().text).toContain("second slide");
+    });
+
+    // After going live, subsequent edits broadcast immediately.
+    await act(async () => {
+      fireEvent.change(editor, {
+        target: { value: "third slide" },
+      });
+    });
+    await waitFor(() => {
+      expect(projected().text).toContain("third slide");
+    });
+  });
+
   it("restores the editor session across a remount", async () => {
     const view = await renderOperator();
 

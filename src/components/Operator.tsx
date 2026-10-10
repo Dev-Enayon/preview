@@ -98,6 +98,7 @@ export function Operator() {
   );
   const [isProjecting, setIsProjecting] = useState(false);
   const [live, setLive] = useState(false);
+  const [liveState, setLiveState] = useState<ProjectionState | null>(null);
   const [blank, setBlank] = useState(initialSession?.blank ?? false);
   const [status, setStatus] = useState<string | null>(null);
   const [renameId, setRenameId] = useState<string | null>(null);
@@ -225,11 +226,21 @@ export function Operator() {
     settings,
     blank,
   ]);
-  // Until the operator goes live, the projector only ever receives the idle
-  // screen; once live, every staged change is sent immediately.
-  const broadcastState = live ? projectionState : IDLE_STATE;
+  // The projector only ever receives what was explicitly committed (liveState);
+  // until the first "Project" press that is the idle screen. Behind that, the
+  // operator may freely stage slides, passages and media without the audience
+  // seeing any of it.
+  const broadcastState = liveState ?? IDLE_STATE;
   const broadcastStateRef = useRef(broadcastState);
   broadcastStateRef.current = broadcastState;
+
+  // While live, every staged change is pushed through to what the projector
+  // displays. Switching sections drops live (see switchMode), which freezes the
+  // last committed content until the next "Project" press.
+  useEffect(() => {
+    if (!live) return;
+    setLiveState(projectionState);
+  }, [live, projectionState]);
 
   const selectMedia = useCallback((id: string | null) => {
     setMediaId(id);
@@ -343,8 +354,9 @@ export function Operator() {
     saveSettings(settings);
   }, [settings]);
 
-  // Broadcast + persist the projection state on every relevant change. While
-  // not live this is the idle screen, so staging never reaches the audience.
+  // Broadcast + persist what the projector should display. Before the first
+  // "Project" press that is the idle screen; afterwards it follows committed
+  // content only, never uncommitted staging.
   useEffect(() => {
     persistProjectionState(broadcastState);
     postSync({ type: "projection-state", state: broadcastState });
@@ -435,9 +447,11 @@ export function Operator() {
     }
   }, [placeProjectionWindow, setError]);
 
-  // Go live: make sure the projection window exists, then push the staged
-  // content to the audience. From here on every edit is broadcast immediately,
-  // so Project is only needed to go live the first time.
+  // Go live: make sure the projection window exists, then commit the staged
+  // content to the audience. Committing is handled by the sync effect below,
+  // so it always uses the freshest state (e.g. a media item clicked in the
+  // same gesture). From here on every edit is broadcast immediately until a
+  // section switch drops live again.
   const projectLive = useCallback(() => {
     setError(null);
     let ready = true;
@@ -457,6 +471,7 @@ export function Operator() {
     projectionWindowRef.current = null;
     setIsProjecting(false);
     setLive(false);
+    setLiveState(null);
     setStatus("Projection stopped. Nothing was deleted.");
     window.setTimeout(() => setStatus(null), 3000);
   }, []);
@@ -577,6 +592,9 @@ export function Operator() {
     (next: ContentType) => {
       setMode(next);
       setError(null);
+      // Switching sections is staging, never projection: the new section only
+      // reaches the audience once "Project" is pressed again.
+      setLive(false);
     },
     [setError],
   );

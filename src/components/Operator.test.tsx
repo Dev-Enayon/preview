@@ -152,6 +152,50 @@ describe("Operator", () => {
     });
   });
 
+  it("keeps section switches staged until Project even after going live", async () => {
+    const fakeWin = {
+      closed: false,
+      focus: vi.fn(),
+      moveTo: vi.fn(),
+      resizeTo: vi.fn(),
+    } as unknown as Window;
+    vi.spyOn(window, "open").mockReturnValue(fakeWin);
+    await renderOperator();
+
+    const editor = screen.getByPlaceholderText(/Type or paste lyrics/i);
+    await act(async () => {
+      fireEvent.change(editor, {
+        target: { value: "alpha\n\nbeta" },
+      });
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Next/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^Project$/i }));
+
+    const projected = () =>
+      JSON.parse(
+        localStorage.getItem("lyrics-projection:state") ?? "null",
+      ) as { text: string; blank: boolean };
+    await waitFor(() => {
+      expect(projected().text).toContain("beta");
+    });
+    expect(await screen.findByText("Projecting")).toBeInTheDocument();
+
+    // Switching to Bible must NOT display: the last committed content stays
+    // put and live is dropped until Project is pressed again.
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^Bible$/i }));
+    });
+    expect(screen.queryByText("Projecting")).toBeNull();
+    expect(projected().text).toContain("beta");
+    expect(projected().blank).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Project$/i }));
+    await waitFor(() => {
+      expect(projected().text).toBe("");
+    });
+    expect(await screen.findByText("Projecting")).toBeInTheDocument();
+  });
+
   it("restores the editor session across a remount", async () => {
     const view = await renderOperator();
 

@@ -8,6 +8,7 @@ import {
   type SyncMessage,
 } from "../lib/sync";
 import { SlideStage } from "./SlideStage";
+import { MediaStage } from "./MediaStage";
 
 const EMPTY_STATE: ProjectionState = {
   contentType: "lyrics",
@@ -107,7 +108,8 @@ export function Projection() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
 
-  const backgroundColor = state.settings.backgroundColor;
+  const showingMedia = state.contentType === "media" && !!state.media;
+  const backgroundColor = showingMedia ? "#000000" : state.settings.backgroundColor;
   useEffect(() => {
     document.body.style.backgroundColor = backgroundColor;
     return () => {
@@ -125,10 +127,17 @@ export function Projection() {
         style={{
           position: "fixed",
           inset: 0,
-          backgroundColor: state.settings.backgroundColor,
+          backgroundColor: state.blank
+            ? state.settings.backgroundColor
+            : backgroundColor,
         }}
       >
-        {!state.blank && <SlideStage text={state.text} settings={state.settings} />}
+        {!state.blank &&
+          (showingMedia && state.media ? (
+            <MediaStage media={state.media} />
+          ) : (
+            <SlideStage text={state.text} settings={state.settings} />
+          ))}
       </div>
     </>
   );

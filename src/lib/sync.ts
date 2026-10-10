@@ -9,7 +9,8 @@ export type SyncMessage =
   | { type: "projection-state"; state: ProjectionState }
   | { type: "request-state" }
   | { type: "nav"; action: NavAction }
-  | { type: "fullscreen"; action: FullscreenAction };
+  | { type: "fullscreen"; action: FullscreenAction }
+  | { type: "media-error"; id: string; message: string };
 
 interface SyncChannel {
   post(message: SyncMessage): void;

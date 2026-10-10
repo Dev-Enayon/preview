@@ -25,15 +25,21 @@ import {
 } from "../lib/session";
 import type {
   ContentType,
+  MediaFit,
+  MediaItem,
   ProjectionSettings,
   ProjectionState,
   Song,
 } from "../types";
 import { useSongs } from "../hooks/useSongs";
 import { useBible } from "../hooks/useBible";
+import { useMedia } from "../hooks/useMedia";
 import { SlideStage } from "./SlideStage";
 import { SettingsPanel } from "./SettingsPanel";
 import { BiblePanel } from "./BiblePanel";
+import { MediaPanel } from "./MediaPanel";
+import { MediaToolbar } from "./MediaToolbar";
+import { MediaPreview } from "./MediaPreview";
 
 interface ScreenLike {
   availLeft: number;
@@ -83,7 +89,24 @@ export function Operator() {
   const [renameId, setRenameId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
 
+  const [mediaId, setMediaId] = useState<string | null>(
+    initialSession?.mediaId ?? null,
+  );
+  const [mediaFit, setMediaFit] = useState<MediaFit>(
+    initialSession?.mediaFit ?? "contain",
+  );
+  const [videoPlaying, setVideoPlaying] = useState(false);
+  const [videoMuted, setVideoMuted] = useState(
+    initialSession?.mediaMuted ?? false,
+  );
+  const [videoVolume, setVideoVolume] = useState(
+    initialSession?.mediaVolume ?? 1,
+  );
+  const [videoRestartToken, setVideoRestartToken] = useState(0);
+
   const { songs, loading, error, save, remove, setError } = useSongs();
+  const media = useMedia();
+  const mediaItems = media.items;
 
   const bible = useBible({
     form: initialSession?.bibleForm ?? null,
@@ -117,48 +140,139 @@ export function Operator() {
         renderSlideText(slide, settings.showVerseNumbers),
       );
     }
+    if (mode === "media") return [];
     return lyricsSlides;
   }, [mode, bibleSlides, settings.showVerseNumbers, lyricsSlides]);
 
   const activeIndex = mode === "bible" ? bibleIndex : currentIndex;
   const activeText = activeSlides[activeIndex] ?? "";
 
+  const selectedMedia = useMemo(
+    () => mediaItems.find((item) => item.id === mediaId) ?? null,
+    [mediaItems, mediaId],
+  );
+  const mediaCount = mediaItems.length;
+  const mediaPosition = useMemo(
+    () => mediaItems.findIndex((item) => item.id === mediaId),
+    [mediaItems, mediaId],
+  );
+
   const activeSlidesRef = useRef(activeSlides);
   activeSlidesRef.current = activeSlides;
   const modeRef = useRef(mode);
   modeRef.current = mode;
+  const mediaItemsRef = useRef(mediaItems);
+  mediaItemsRef.current = mediaItems;
+  const selectedMediaRef = useRef(selectedMedia);
+  selectedMediaRef.current = selectedMedia;
 
   const setActiveIndex = useCallback((index: number) => {
     if (modeRef.current === "bible") setBibleIndex(index);
     else setCurrentIndex(index);
   }, []);
 
-  const projectionState: ProjectionState = useMemo(
-    () => ({ contentType: mode, text: activeText, settings, blank }),
-    [mode, activeText, settings, blank],
-  );
+  const projectionState: ProjectionState = useMemo(() => {
+    if (mode === "media") {
+      return {
+        contentType: "media",
+        text: "",
+        settings,
+        blank,
+        media: selectedMedia
+          ? {
+              id: selectedMedia.id,
+              kind: selectedMedia.kind,
+              fit: mediaFit,
+              muted: videoMuted,
+              volume: videoVolume,
+              playing:
+                selectedMedia.kind === "video" ? videoPlaying : false,
+              restartToken: videoRestartToken,
+            }
+          : null,
+      };
+    }
+    return {
+      contentType: mode,
+      text: activeText,
+      settings,
+      blank,
+      media: null,
+    };
+  }, [
+    mode,
+    selectedMedia,
+    mediaFit,
+    videoMuted,
+    videoVolume,
+    videoPlaying,
+    videoRestartToken,
+    activeText,
+    settings,
+    blank,
+  ]);
   const projectionStateRef = useRef(projectionState);
   projectionStateRef.current = projectionState;
 
-  const navigate = useCallback((action: NavAction) => {
-    const count = activeSlidesRef.current.length;
-    const setter = modeRef.current === "bible" ? setBibleIndex : setCurrentIndex;
-    setter((prev) => {
-      if (count === 0) return 0;
+  const selectMedia = useCallback((id: string | null) => {
+    setMediaId(id);
+    setVideoPlaying(false);
+  }, []);
+
+  const moveMedia = useCallback((action: NavAction) => {
+    const items = mediaItemsRef.current;
+    if (items.length === 0) return;
+    setMediaId((prev) => {
+      const current = items.findIndex((item) => item.id === prev);
+      let next = current;
       switch (action) {
         case "next":
-          return Math.min(prev + 1, count - 1);
+          next = current < 0 ? 0 : Math.min(current + 1, items.length - 1);
+          break;
         case "prev":
-          return Math.max(prev - 1, 0);
+          next = current < 0 ? items.length - 1 : Math.max(current - 1, 0);
+          break;
         case "first":
-          return 0;
+          next = 0;
+          break;
         case "last":
-          return count - 1;
+          next = items.length - 1;
+          break;
         default:
-          return prev;
+          next = current;
       }
+      return items[next]?.id ?? prev;
     });
+    setVideoPlaying(false);
   }, []);
+
+  const navigate = useCallback(
+    (action: NavAction) => {
+      if (modeRef.current === "media") {
+        moveMedia(action);
+        return;
+      }
+      const count = activeSlidesRef.current.length;
+      const setter =
+        modeRef.current === "bible" ? setBibleIndex : setCurrentIndex;
+      setter((prev) => {
+        if (count === 0) return 0;
+        switch (action) {
+          case "next":
+            return Math.min(prev + 1, count - 1);
+          case "prev":
+            return Math.max(prev - 1, 0);
+          case "first":
+            return 0;
+          case "last":
+            return count - 1;
+          default:
+            return prev;
+        }
+      });
+    },
+    [moveMedia],
+  );
 
   // Keep each mode's index valid as its slides change.
   useEffect(() => {
@@ -184,6 +298,10 @@ export function Operator() {
       bibleReference: bible.reference,
       bibleSelectedVerses: bible.selectedVerses,
       bibleForm: bible.form,
+      mediaId,
+      mediaFit,
+      mediaMuted: videoMuted,
+      mediaVolume: videoVolume,
     });
   }, [
     editorName,
@@ -197,6 +315,10 @@ export function Operator() {
     bible.reference,
     bible.selectedVerses,
     bible.form,
+    mediaId,
+    mediaFit,
+    videoMuted,
+    videoVolume,
   ]);
 
   // Persist settings whenever they change.
@@ -220,10 +342,12 @@ export function Operator() {
         });
       } else if (message.type === "nav") {
         navigate(message.action);
+      } else if (message.type === "media-error") {
+        setError(message.message);
       }
     });
     return unsubscribe;
-  }, [navigate]);
+  }, [navigate, setError]);
 
   // Detect when the projection window is closed by the user.
   useEffect(() => {
@@ -301,6 +425,62 @@ export function Operator() {
     window.setTimeout(() => setStatus(null), 3000);
   }, []);
 
+  // Drop a selected media reference that no longer exists in the library
+  // (e.g. after deleting it, or when it was removed in another tab).
+  useEffect(() => {
+    if (
+      mediaId &&
+      !media.loading &&
+      !mediaItems.some((item) => item.id === mediaId)
+    ) {
+      setMediaId(null);
+      setVideoPlaying(false);
+    }
+  }, [mediaId, media.loading, mediaItems]);
+
+  const projectMedia = useCallback(
+    (id?: string) => {
+      const target = id ?? mediaId;
+      if (!target) {
+        setError("Select a media item to project first.");
+        return;
+      }
+      if (id && id !== mediaId) selectMedia(id);
+      setError(null);
+      if (!isProjecting) startProjection();
+    },
+    [mediaId, selectMedia, isProjecting, startProjection, setError],
+  );
+
+  const handleDeleteMedia = useCallback(
+    async (item: MediaItem) => {
+      if (
+        !window.confirm(
+          `Delete “${item.name}” from the media library? This cannot be undone.`,
+        )
+      ) {
+        return;
+      }
+      await media.remove(item.id);
+      if (mediaId === item.id) selectMedia(null);
+      setStatus(`Deleted “${item.name}” from the media library.`);
+      window.setTimeout(() => setStatus(null), 3000);
+    },
+    [media, mediaId, selectMedia],
+  );
+
+  const playVideo = useCallback(() => setVideoPlaying(true), []);
+  const pauseVideo = useCallback(() => setVideoPlaying(false), []);
+  const restartVideo = useCallback(() => {
+    setVideoPlaying(true);
+    setVideoRestartToken((token) => token + 1);
+  }, []);
+  const toggleMute = useCallback(() => setVideoMuted((m) => !m), []);
+  const changeVolume = useCallback(
+    (value: number) => setVideoVolume(Math.min(1, Math.max(0, value))),
+    [],
+  );
+
   // Keyboard shortcuts (ignored while typing in a field).
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -316,6 +496,16 @@ export function Operator() {
       }
       switch (event.key) {
         case " ":
+          event.preventDefault();
+          if (
+            modeRef.current === "media" &&
+            selectedMediaRef.current?.kind === "video"
+          ) {
+            setVideoPlaying((prev) => !prev);
+          } else {
+            navigate("next");
+          }
+          break;
         case "ArrowRight":
           event.preventDefault();
           navigate("next");
@@ -450,13 +640,21 @@ export function Operator() {
   return (
     <div className="flex min-h-full flex-col">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 bg-slate-950/80 px-4 py-3">
-        <div>
-          <h1 className="text-lg font-semibold text-white">
-            Lyrics &amp; Bible Projection
-          </h1>
-          <p className="text-xs text-slate-400">
-            Operator console — only the current slide reaches the projector.
-          </p>
+        <div className="flex items-center gap-3">
+          <img
+            src="./logo.png"
+            alt="Media Presenter logo"
+            className="h-10 w-10 rounded-lg"
+          />
+          <div>
+            <h1 className="text-lg font-semibold text-white">
+              Media Presenter
+            </h1>
+            <p className="text-xs text-slate-400">
+              Lyrics, Bible &amp; media — only the current item reaches the
+              projector.
+            </p>
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div
@@ -487,6 +685,18 @@ export function Operator() {
               }`}
             >
               Bible
+            </button>
+            <button
+              type="button"
+              onClick={() => switchMode("media")}
+              aria-pressed={mode === "media"}
+              className={`rounded px-3 py-1.5 text-sm font-medium transition ${
+                mode === "media"
+                  ? "bg-sky-600 text-white"
+                  : "text-slate-300 hover:text-white"
+              }`}
+            >
+              Media
             </button>
           </div>
           <span
@@ -682,8 +892,17 @@ export function Operator() {
               </div>
             </section>
           </div>
-        ) : (
+        ) : mode === "bible" ? (
           <BiblePanel bible={bible} />
+        ) : (
+          <MediaPanel
+            media={media}
+            selectedId={mediaId}
+            isProjectingSelected={isProjecting && mode === "media"}
+            onSelect={selectMedia}
+            onProject={(id) => projectMedia(id)}
+            onDelete={handleDeleteMedia}
+          />
         )}
 
         {/* Center: preview + slides */}
@@ -694,92 +913,179 @@ export function Operator() {
                 Live preview
               </h2>
               <span className="text-xs text-slate-500">
-                {mode === "bible" ? "Bible mode" : "Lyrics mode"}
+                {mode === "bible"
+                  ? "Bible mode"
+                  : mode === "media"
+                    ? "Media mode"
+                    : "Lyrics mode"}
               </span>
             </div>
             <div className="aspect-video w-full overflow-hidden rounded-lg border border-slate-700">
-              <SlideStage
-                text={blank ? "" : activeText}
-                settings={settings}
-                inset="6% 7%"
-              />
+              {mode === "media" ? (
+                <MediaPreview
+                  item={selectedMedia}
+                  fit={mediaFit}
+                  blank={blank}
+                />
+              ) : (
+                <SlideStage
+                  text={blank ? "" : activeText}
+                  settings={settings}
+                  inset="6% 7%"
+                />
+              )}
             </div>
-            <div className="flex items-center justify-between gap-2">
-              <button
-                type="button"
-                onClick={() => navigate("prev")}
-                className="rounded-md border border-slate-700 px-4 py-2 text-sm text-slate-200 transition hover:border-sky-500 disabled:opacity-40"
-                disabled={activeIndex <= 0 || slideTotal === 0}
-              >
-                ◀ Prev
-              </button>
-              <span className="text-sm text-slate-400">
-                {slideTotal === 0
-                  ? "No slides"
-                  : `Slide ${activeIndex + 1} of ${slideTotal}`}
-              </span>
-              <button
-                type="button"
-                onClick={() => navigate("next")}
-                className="rounded-md border border-slate-700 px-4 py-2 text-sm text-slate-200 transition hover:border-sky-500 disabled:opacity-40"
-                disabled={slideTotal === 0 || activeIndex >= slideTotal - 1}
-              >
-                Next ▶
-              </button>
-            </div>
+            {mode !== "media" && (
+              <div className="flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={() => navigate("prev")}
+                  className="rounded-md border border-slate-700 px-4 py-2 text-sm text-slate-200 transition hover:border-sky-500 disabled:opacity-40"
+                  disabled={activeIndex <= 0 || slideTotal === 0}
+                >
+                  ◀ Prev
+                </button>
+                <span className="text-sm text-slate-400">
+                  {slideTotal === 0
+                    ? "No slides"
+                    : `Slide ${activeIndex + 1} of ${slideTotal}`}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => navigate("next")}
+                  className="rounded-md border border-slate-700 px-4 py-2 text-sm text-slate-200 transition hover:border-sky-500 disabled:opacity-40"
+                  disabled={slideTotal === 0 || activeIndex >= slideTotal - 1}
+                >
+                  Next ▶
+                </button>
+              </div>
+            )}
           </section>
 
-          <section className="flex min-h-0 flex-1 flex-col gap-3 rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-300">
-              Slides
-            </h2>
-            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
-              {slideTotal === 0 && (
-                <p className="text-sm text-slate-500">
-                  {mode === "bible"
-                    ? "Search for a Bible passage to create slides."
-                    : "Enter lyrics to create slides."}
-                </p>
-              )}
-              {activeSlides.map((slide, index) => (
-                <button
-                  key={index}
-                  type="button"
-                  onClick={() => setActiveIndex(index)}
-                  className={`flex w-full items-start gap-3 rounded-lg border p-2 text-left transition ${
-                    index === activeIndex
-                      ? "border-sky-500 bg-sky-500/10"
-                      : "border-slate-800 bg-slate-950/50 hover:border-slate-600"
-                  }`}
-                >
-                  <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-800 text-xs text-slate-300">
-                    {index + 1}
-                  </span>
-                  <span className="min-w-0 whitespace-pre-wrap break-words text-sm text-slate-200">
-                    {slide}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </section>
+          {mode === "media" ? (
+            <MediaToolbar
+              hasSelection={!!selectedMedia}
+              selectedKind={selectedMedia?.kind ?? null}
+              fit={mediaFit}
+              onFit={setMediaFit}
+              canPrev={mediaPosition > 0}
+              canNext={
+                mediaPosition >= 0 && mediaPosition < mediaCount - 1
+              }
+              onPrev={() => navigate("prev")}
+              onNext={() => navigate("next")}
+              onProject={() => projectMedia()}
+              onUpload={() =>
+                document.getElementById("media-library-dropzone")
+                  ?.scrollIntoView({ behavior: "smooth", block: "start" })
+              }
+              onOpenLibrary={() =>
+                document.getElementById("media-library-dropzone")
+                  ?.scrollIntoView({ behavior: "smooth", block: "start" })
+              }
+              onDelete={() => {
+                if (selectedMedia) void handleDeleteMedia(selectedMedia);
+              }}
+              video={{
+                playing: videoPlaying,
+                muted: videoMuted,
+                volume: videoVolume,
+              }}
+              onPlay={playVideo}
+              onPause={pauseVideo}
+              onRestart={restartVideo}
+              onToggleMute={toggleMute}
+              onVolume={changeVolume}
+            />
+          ) : (
+            <section className="flex min-h-0 flex-1 flex-col gap-3 rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-300">
+                Slides
+              </h2>
+              <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
+                {slideTotal === 0 && (
+                  <p className="text-sm text-slate-500">
+                    {mode === "bible"
+                      ? "Search for a Bible passage to create slides."
+                      : "Enter lyrics to create slides."}
+                  </p>
+                )}
+                {activeSlides.map((slide, index) => (
+                  <button
+                    key={index}
+                    type="button"
+                    onClick={() => setActiveIndex(index)}
+                    className={`flex w-full items-start gap-3 rounded-lg border p-2 text-left transition ${
+                      index === activeIndex
+                        ? "border-sky-500 bg-sky-500/10"
+                        : "border-slate-800 bg-slate-950/50 hover:border-slate-600"
+                    }`}
+                  >
+                    <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-800 text-xs text-slate-300">
+                      {index + 1}
+                    </span>
+                    <span className="min-w-0 whitespace-pre-wrap break-words text-sm text-slate-200">
+                      {slide}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
         </div>
 
         {/* Right: settings */}
         <section className="flex flex-col gap-3 rounded-xl border border-slate-800 bg-slate-900/60 p-4">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-300">
-            Projection appearance
+            {mode === "media" ? "Media presentation" : "Projection appearance"}
           </h2>
-          <SettingsPanel
-            settings={settings}
-            onChange={patchSettings}
-            showVerseNumbersOption={mode === "bible"}
-          />
+          {mode === "media" ? (
+            <div className="flex flex-col gap-3 text-sm text-slate-300">
+              <p className="text-xs text-slate-500">
+                The projector shows only the selected image or video — nothing
+                else. Unused space stays black.
+              </p>
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                  Selected
+                </span>
+                <span className="truncate text-slate-200">
+                  {selectedMedia ? selectedMedia.name : "None"}
+                </span>
+              </div>
+              <div className="rounded-lg border border-slate-800 bg-slate-950/50 p-3 text-xs text-slate-400">
+                <p className="mb-1 font-semibold text-slate-300">
+                  Stored on this device
+                </p>
+                <p>
+                  Uploaded media lives in this browser (IndexedDB) on this
+                  computer. It is not uploaded anywhere and will not appear on
+                  another computer or browser profile.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <SettingsPanel
+              settings={settings}
+              onChange={patchSettings}
+              showVerseNumbersOption={mode === "bible"}
+            />
+          )}
           <div className="mt-2 rounded-lg border border-slate-800 bg-slate-950/50 p-3 text-xs text-slate-400">
             <p className="mb-1 font-semibold text-slate-300">
               Keyboard shortcuts
             </p>
-            <p>Space / → next · ← previous</p>
-            <p>Home first · End last</p>
+            {mode === "media" ? (
+              <>
+                <p>→ next media · ← previous</p>
+                <p>Space play/pause video (or next)</p>
+              </>
+            ) : (
+              <>
+                <p>Space / → next · ← previous</p>
+                <p>Home first · End last</p>
+              </>
+            )}
             <p>F full screen · Esc exit full screen</p>
           </div>
         </section>

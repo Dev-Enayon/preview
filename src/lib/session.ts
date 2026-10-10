@@ -1,4 +1,4 @@
-import type { ContentType } from "../types";
+import type { ContentType, MediaFit } from "../types";
 import type { BiblePassage } from "./bible";
 
 export interface BibleFormState {
@@ -21,6 +21,10 @@ export interface OperatorSession {
   bibleReference?: string;
   bibleSelectedVerses?: number[];
   bibleForm?: BibleFormState | null;
+  mediaId?: string | null;
+  mediaFit?: MediaFit;
+  mediaMuted?: boolean;
+  mediaVolume?: number;
 }
 
 const KEY = "lyrics-projection:operator-session";
@@ -46,7 +50,10 @@ export function loadOperatorSession(): OperatorSession | null {
       currentIndex:
         typeof parsed.currentIndex === "number" ? parsed.currentIndex : 0,
       blank: typeof parsed.blank === "boolean" ? parsed.blank : false,
-      mode: parsed.mode === "bible" ? "bible" : "lyrics",
+      mode:
+        parsed.mode === "bible" || parsed.mode === "media"
+          ? parsed.mode
+          : "lyrics",
       bibleIndex:
         typeof parsed.bibleIndex === "number" ? parsed.bibleIndex : 0,
       biblePassage:
@@ -62,6 +69,15 @@ export function loadOperatorSession(): OperatorSession | null {
         parsed.bibleForm && typeof parsed.bibleForm === "object"
           ? parsed.bibleForm
           : null,
+      mediaId: typeof parsed.mediaId === "string" ? parsed.mediaId : null,
+      mediaFit: parsed.mediaFit === "cover" ? "cover" : "contain",
+      mediaMuted:
+        typeof parsed.mediaMuted === "boolean" ? parsed.mediaMuted : false,
+      mediaVolume:
+        typeof parsed.mediaVolume === "number" &&
+        Number.isFinite(parsed.mediaVolume)
+          ? Math.min(1, Math.max(0, parsed.mediaVolume))
+          : 1,
     };
   } catch {
     return null;

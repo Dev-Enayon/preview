@@ -1,6 +1,22 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { __resetMediaMemory } from "../lib/mediaStore";
+import { probeMedia } from "../lib/mediaThumbnails";
 import { Operator } from "./Operator";
+
+// Thumbnail probing needs a real browser; keep it instant and inert in tests.
+vi.mock("../lib/mediaThumbnails", () => ({ probeMedia: vi.fn() }));
+
+beforeEach(() => {
+  vi.mocked(probeMedia).mockResolvedValue({});
+});
 
 async function renderOperator() {
   const view = render(<Operator />);
@@ -11,6 +27,7 @@ async function renderOperator() {
 afterEach(() => {
   cleanup();
   localStorage.clear();
+  __resetMediaMemory();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -236,5 +253,145 @@ describe("Operator", () => {
     });
     const previewText = previewBox.textContent ?? "";
     expect(previewText.trim().startsWith("16 For God")).toBe(true);
+  });
+});
+
+function makeFile(name: string, type: string, content = "data") {
+  return new File([content], name, { type });
+}
+
+function fileInput(): HTMLInputElement {
+  const input = document.querySelector<HTMLInputElement>('input[type="file"]');
+  if (!input) throw new Error("file input not found");
+  return input;
+}
+
+async function upload(files: File[]) {
+  await act(async () => {
+    fireEvent.change(fileInput(), { target: { files } });
+  });
+}
+
+describe("Operator media mode", () => {
+  it("switches to Media mode and shows the library and toolbar", async () => {
+    await renderOperator();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Media" }));
+    });
+
+    expect(
+      screen.getByRole("heading", { name: /Media library/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /Media controls/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByPlaceholderText(/Type or paste lyrics/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it("uploads multiple images and lists them", async () => {
+    await renderOperator();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Media" }));
+    });
+
+    await upload([
+      makeFile("one.png", "image/png"),
+      makeFile("two.jpg", "image/jpeg"),
+    ]);
+
+    expect(await screen.findByText("one.png")).toBeInTheDocument();
+    expect(screen.getByText("two.jpg")).toBeInTheDocument();
+    expect(screen.getByText(/Added 2 files/i)).toBeInTheDocument();
+  });
+
+  it("accepts videos and shows a video badge", async () => {
+    await renderOperator();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Media" }));
+    });
+
+    await upload([makeFile("clip.mp4", "video/mp4")]);
+    expect(await screen.findByText("clip.mp4")).toBeInTheDocument();
+    // The gallery badge and the toolbar reflect the video kind.
+    expect(screen.getAllByText("Video").length).toBeGreaterThan(0);
+  });
+
+  it("rejects unsupported files with a clear error", async () => {
+    await renderOperator();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Media" }));
+    });
+
+    await upload([makeFile("notes.txt", "text/plain")]);
+    expect(
+      await screen.findByText(/not a supported file type/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("notes.txt")).not.toBeInTheDocument();
+  });
+
+  it("deletes a media item after confirmation", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    await renderOperator();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Media" }));
+    });
+
+    await upload([makeFile("gone.png", "image/png")]);
+    await screen.findByText("gone.png");
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^Delete$/ }));
+    });
+
+    await waitFor(() =>
+      expect(screen.queryByText("gone.png")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("restores the media library after a remount", async () => {
+    const view = await renderOperator();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Media" }));
+    });
+    await upload([makeFile("keeper.png", "image/png")]);
+    await screen.findByText("keeper.png");
+
+    // Return to lyrics mode so the remount helper has its familiar anchor.
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^Lyrics$/ }));
+    });
+    view.unmount();
+    await renderOperator();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Media" }));
+    });
+
+    expect(await screen.findByText("keeper.png")).toBeInTheDocument();
+  });
+
+  it("keeps lyrics work when switching Media → Lyrics", async () => {
+    await renderOperator();
+    const editor = screen.getByPlaceholderText(/Type or paste lyrics/i);
+    await act(async () => {
+      fireEvent.change(editor, {
+        target: { value: "Amazing grace\n\nThat saved a wretch" },
+      });
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Media" }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^Lyrics$/ }));
+    });
+
+    const restored = screen.getByPlaceholderText(
+      /Type or paste lyrics/i,
+    ) as HTMLTextAreaElement;
+    expect(restored.value).toBe("Amazing grace\n\nThat saved a wretch");
+    expect(screen.getByText(/Slide 1 of 2/i)).toBeInTheDocument();
   });
 });

@@ -103,9 +103,11 @@ Files are validated by both extension and MIME type, and size-limited
 (25 MB for images, 512 MB for video).
 
 **Projecting** — click an item and press **Project selected** (or the item's
-**Project** button). For images you can choose **Contain** (whole image, black
-bars) or **Cover** (fill the screen, crop if needed); the projection always
-keeps the image's aspect ratio in a black frame.
+**Project** button). Images are always shown in full: the whole picture is
+scaled to fit the projection screen with its aspect ratio preserved (black
+bars appear around it when the screen shape differs), so no part of a still
+image is ever cropped. Videos can be set to **Contain** (whole frame, black
+bars) or **Cover** (fill the screen, crop if needed).
 
 **Video controls** live in the operator window only: **Play**, **Pause**,
 **Restart**, **Mute/Unmute**, and a **Volume** slider. The browser's native

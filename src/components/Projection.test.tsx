@@ -85,7 +85,7 @@ describe("Projection", () => {
     expect(screen.queryByText(/SHOULD NOT APPEAR/)).toBeNull();
   });
 
-  it("preserves the aspect ratio with cover fit", async () => {
+  it("always projects the full image, ignoring a cover fit", async () => {
     vi.spyOn(mediaStore, "getBlob").mockResolvedValue(
       new Blob(["x"], { type: "image/png" }),
     );
@@ -100,7 +100,7 @@ describe("Projection", () => {
     const { container } = render(<Projection />);
     await waitFor(() => expect(container.querySelector("img")).not.toBeNull());
     const img = container.querySelector("img") as HTMLImageElement;
-    expect(img.style.objectFit).toBe("cover");
+    expect(img.style.objectFit).toBe("contain");
   });
 
   it("renders a video without native controls and without overlays", async () => {

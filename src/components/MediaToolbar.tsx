@@ -100,36 +100,38 @@ export function MediaToolbar({
           Next ▶
         </button>
 
-        <div
-          role="group"
-          aria-label="Image fit"
-          className="flex rounded-md border border-slate-700 p-0.5"
-        >
-          <button
-            type="button"
-            onClick={() => onFit("contain")}
-            aria-pressed={fit === "contain"}
-            className={`rounded px-3 py-1.5 text-sm font-medium transition ${
-              fit === "contain"
-                ? "bg-sky-600 text-white"
-                : "text-slate-300 hover:text-white"
-            }`}
+        {isVideo && (
+          <div
+            role="group"
+            aria-label="Image fit"
+            className="flex rounded-md border border-slate-700 p-0.5"
           >
-            Contain
-          </button>
-          <button
-            type="button"
-            onClick={() => onFit("cover")}
-            aria-pressed={fit === "cover"}
-            className={`rounded px-3 py-1.5 text-sm font-medium transition ${
-              fit === "cover"
-                ? "bg-sky-600 text-white"
-                : "text-slate-300 hover:text-white"
-            }`}
-          >
-            Cover
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={() => onFit("contain")}
+              aria-pressed={fit === "contain"}
+              className={`rounded px-3 py-1.5 text-sm font-medium transition ${
+                fit === "contain"
+                  ? "bg-sky-600 text-white"
+                  : "text-slate-300 hover:text-white"
+              }`}
+            >
+              Contain
+            </button>
+            <button
+              type="button"
+              onClick={() => onFit("cover")}
+              aria-pressed={fit === "cover"}
+              className={`rounded px-3 py-1.5 text-sm font-medium transition ${
+                fit === "cover"
+                  ? "bg-sky-600 text-white"
+                  : "text-slate-300 hover:text-white"
+              }`}
+            >
+              Cover
+            </button>
+          </div>
+        )}
       </div>
 
       {isVideo && (

@@ -105,6 +105,10 @@ export function MediaStage({ media }: MediaStageProps) {
   }
 
   if (media.kind === "image") {
+    // Images are always projected in full. "contain" scales the picture to fit
+    // the whole screen while preserving its aspect ratio, so nothing is ever
+    // cropped off (the "cover" mode intentionally crops and is never used for a
+    // still image).
     return (
       <img
         src={url}
@@ -118,7 +122,7 @@ export function MediaStage({ media }: MediaStageProps) {
             message: "This image could not be decoded by the browser.",
           });
         }}
-        style={{ ...fill, objectFit: media.fit }}
+        style={{ ...fill, objectFit: "contain" }}
       />
     );
   }

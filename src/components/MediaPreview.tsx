@@ -49,7 +49,8 @@ export function MediaPreview({ item, fit, blank }: MediaPreviewProps) {
             inset: 0,
             width: "100%",
             height: "100%",
-            objectFit: fit,
+            // Match the projector: still images are always shown in full.
+            objectFit: item.kind === "image" ? "contain" : fit,
           }}
         />
       ) : (
